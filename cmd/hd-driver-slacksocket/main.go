@@ -244,6 +244,10 @@ func (d *slacksocketDriver) handleSocketEvent(event socketmode.Event) {
 	switch event.Type {
 	case socketmode.EventTypeEventsAPI:
 		d.handleEventsAPIBackground(event)
+	case socketmode.EventTypeInteractive:
+		d.handleInteractiveEvent(event)
+	case socketmode.EventTypeSlashCommand:
+		d.handleSlashCommandEvent(event)
 	case socketmode.EventTypeDisconnect:
 		log.Infof("[%s] received disconnect message from Slack", d.Service)
 	case socketmode.EventTypeHello:
@@ -287,6 +291,138 @@ func (d *slacksocketDriver) handleEventsAPIBackground(event socketmode.Event) {
 		"events": []interface{}{"slack." + innerEvent.Type},
 		"data":   payload,
 	})
+}
+
+func (d *slacksocketDriver) handleInteractiveEvent(event socketmode.Event) {
+	log := d.GetLogger()
+
+	// Ack the envelope immediately (required by Slack for interactive callbacks)
+	d.socketClient.Ack(*event.Request)
+
+	payload := d.buildInteractivePayload(event)
+	if payload == nil {
+		return
+	}
+
+	callback, _ := event.Data.(slack.InteractionCallback)
+	log.Debugf("[%s] received interactive event: type=%s, callback_id=%s", d.Service, callback.Type, callback.CallbackID)
+
+	if !d.matchCollapsedEvents(payload) {
+		log.Debugf("[%s] interactive event %s did not match any collapsed event rule", d.Service, callback.Type)
+
+		return
+	}
+
+	_ = d.EmitEvent(map[string]interface{}{
+		"events": []interface{}{"slack.interactive"},
+		"data":   payload,
+	})
+}
+
+func (d *slacksocketDriver) handleSlashCommandEvent(event socketmode.Event) {
+	log := d.GetLogger()
+
+	// Ack the envelope immediately (required by Slack for slash commands)
+	d.socketClient.Ack(*event.Request)
+
+	payload := d.buildSlashCommandPayload(event)
+	if payload == nil {
+		return
+	}
+
+	cmd, _ := event.Data.(slack.SlashCommand)
+	log.Debugf("[%s] received slash command: command=%s, text=%s, user=%s", d.Service, cmd.Command, cmd.Text, cmd.UserID)
+
+	if !d.matchCollapsedEvents(payload) {
+		log.Debugf("[%s] slash command %s did not match any collapsed event rule", d.Service, cmd.Command)
+
+		return
+	}
+
+	_ = d.EmitEvent(map[string]interface{}{
+		"events": []interface{}{"slack.slash_command"},
+		"data":   payload,
+	})
+}
+
+// buildInteractivePayload extracts data from a socketmode interactive event and
+// returns a payload map, or nil if the event data is invalid or missing a request.
+func (d *slacksocketDriver) buildInteractivePayload(event socketmode.Event) map[string]interface{} {
+	if event.Request == nil {
+		return nil
+	}
+
+	callback, ok := event.Data.(slack.InteractionCallback)
+	if !ok {
+		return nil
+	}
+
+	payload := map[string]interface{}{
+		"event_type":    "interactive",
+		"callback_type": string(callback.Type),
+		"callback_id":   callback.CallbackID,
+		"action_ts":     callback.ActionTs,
+		"channel":       callback.Channel.ID,
+		"user":          callback.User.ID,
+		"team":          callback.Team.ID,
+		"response_url":  callback.ResponseURL,
+		"trigger_id":    callback.TriggerID,
+	}
+
+	// Add message data if present (e.g., for button clicks on messages)
+	messageData, err := json.Marshal(callback.Message)
+	if err == nil {
+		var msg interface{}
+		if err := json.Unmarshal(messageData, &msg); err == nil && msg != nil {
+			payload["message"] = msg
+		}
+	}
+
+	// Add view data if present (e.g., for modal submissions)
+	viewData, err := json.Marshal(callback.View)
+	if err == nil {
+		var view interface{}
+		if err := json.Unmarshal(viewData, &view); err == nil && view != nil {
+			payload["view"] = view
+		}
+	}
+
+	// Add actions data if present (e.g., for block actions)
+	actionsData, err := json.Marshal(callback.ActionCallback)
+	if err == nil {
+		var actions interface{}
+		if err := json.Unmarshal(actionsData, &actions); err == nil && actions != nil {
+			payload["actions"] = actions
+		}
+	}
+
+	return payload
+}
+
+// buildSlashCommandPayload extracts data from a socketmode slash command event and
+// returns a payload map, or nil if the event data is invalid or missing a request.
+func (d *slacksocketDriver) buildSlashCommandPayload(event socketmode.Event) map[string]interface{} {
+	if event.Request == nil {
+		return nil
+	}
+
+	cmd, ok := event.Data.(slack.SlashCommand)
+	if !ok {
+		return nil
+	}
+
+	return map[string]interface{}{
+		"event_type":   "slash_command",
+		"command":      cmd.Command,
+		"text":         cmd.Text,
+		"user_id":      cmd.UserID,
+		"channel_id":   cmd.ChannelID,
+		"team_id":      cmd.TeamID,
+		"response_url": cmd.ResponseURL,
+		"trigger_id":   cmd.TriggerID,
+		"user_name":    cmd.UserName,
+		"channel_name": cmd.ChannelName,
+	}
 }
 
 func (d *slacksocketDriver) buildEventPayload(innerEvent slackevents.EventsAPIInnerEvent) map[string]interface{} {
