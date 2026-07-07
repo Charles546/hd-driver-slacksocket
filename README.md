@@ -14,12 +14,14 @@ This driver enables Honeydipper to receive Slack events via [Socket Mode](https:
 
 - Go 1.25+ (for building)
 - A Slack App with Socket Mode enabled
-- Slack App-Level Token (\`xapp-\`) with \`connections:write\` scope
-- Slack Bot Token (\`xoxb-\`) with appropriate event subscriptions
+- Slack App-Level Token (`xapp-`) with `connections:write` scope
+- Slack Bot Token (`xoxb-`) with appropriate event subscriptions
 
 ## Quick Start
 
 ### 1. Build the Driver
+
+#### Building from source
 
 ```bash
 git clone https://github.com/Charles546/hd-driver-slacksocket.git
@@ -27,10 +29,26 @@ cd hd-driver-slacksocket
 make build
 ```
 
+#### Building with Docker
+
+```bash
+git clone https://github.com/Charles546/hd-driver-slacksocket.git
+cd hd-driver-slacksocket
+make docker
+```
+
+This produces a Docker image `hd-driver-slacksocket:latest` based on `honeydipper/honeydipper:3.10.0`, with the driver binary placed at `/opt/honeydipper/drivers/builtin/hd-driver-slacksocket` — the same directory as other built-in drivers.
+
+You can also build manually:
+
+```bash
+docker build -t hd-driver-slacksocket .
+```
+
 ### 2. Configure Slack App
 
 1. Enable Socket Mode in your Slack App settings
-2. Create an App-Level Token with \`connections:write\` scope
+2. Create an App-Level Token with `connections:write` scope
 3. Subscribe to the bot events you need
 4. Install the app to your workspace and get the Bot Token
 
@@ -53,7 +71,7 @@ drivers:
 
 ### 4. Configure Event Rules
 
-Define which Slack events to process using \`collapsedEvents\`:
+Define which Slack events to process using `collapsedEvents`:
 
 ```yaml
 drivers:
@@ -87,8 +105,8 @@ Start Honeydipper with the slacksocket driver configured. The driver will automa
 1. Slack sends an event through the Socket Mode WebSocket
 2. Driver receives the envelope and acknowledges it back to Slack
 3. Driver extracts the event payload
-4. Driver checks the event against \`collapsedEvents\` conditions
-5. If matched, the event is emitted to Honeydipper's event bus as \`slack.<event_type>\`
+4. Driver checks the event against `collapsedEvents` conditions
+5. If matched, the event is emitted to Honeydipper's event bus as `slack.<event_type>`
 
 ## Reconnection Logic
 
@@ -96,6 +114,16 @@ Start Honeydipper with the slacksocket driver configured. The driver will automa
 - On connection drop, the driver uses exponential backoff (1s → 2s → 4s → ... → 60s max)
 - Maximum of 10 reconnection attempts before panicking
 - Reconnection respects driver state — no reconnection if draining or completed
+
+## Docker Image
+
+The repository includes a multi-stage `Dockerfile` for building a minimal Docker image:
+
+- **Builder stage**: Uses `golang:1.25.10` to compile the binary with `CGO_ENABLED=0`
+- **Base image**: Uses `honeydipper/honeydipper:3.10.0`, which contains the Honeydipper daemon and all built-in drivers
+- **Binary location**: The `hd-driver-slacksocket` binary is copied to `/opt/honeydipper/drivers/builtin/`, the standard directory where Honeydipper looks for driver executables
+
+The image can be used directly with Honeydipper's Docker Compose or Kubernetes deployments. The driver binary appears alongside other built-in drivers and is automatically discoverable by the daemon.
 
 ## Documentation
 
@@ -122,7 +150,7 @@ Contributions are welcome. Please ensure tests pass and add new tests for new fe
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Run \`go test ./...\` and \`golangci-lint run\`
+4. Run `go test ./...` and `golangci-lint run`
 5. Submit a pull request
 
 ## References

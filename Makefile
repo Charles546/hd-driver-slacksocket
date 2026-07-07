@@ -17,4 +17,4 @@ clean:
 	rm -f hd-driver-slacksocket
 
 docker:
-	docker build -f build/docker/Dockerfile -t hd-driver-slacksocket:latest .
+	docker build -t hd-driver-slacksocket:latest .
