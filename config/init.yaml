@@ -1,0 +1,48 @@
+---
+# By default this config loads hd-driver-slacksocket from the remote driver
+# registry. To use a pre-fetched local binary instead, load this repo with:
+#
+# repos:
+#   - repo: <this repo>
+#     options:
+#       use_local_binary: true
+#
+# Optional repo options for the remote case:
+#   registry: override the named registry (default: charles-gh-pages)
+#   channel: override the release channel (default: stable)
+#   version: pin an exact release version
+drivers:
+  daemon:
+    drivers:
+      slacksocket:
+        name: slacksocket
+        type: '{% if .options.use_local_binary %}builtin{% else %}remote{% end %}'
+        handlerData:
+{% if .options.use_local_binary %}
+          shortName: hd-driver-slacksocket
+{% else %}
+          registry: '{% default "charles-gh-pages" .options.registry %}'
+          channel: '{% default "stable" .options.channel %}'
+{% if .options.version %}
+          version: '{% .options.version %}'
+{% end %}
+{% end %}
+    services:
+      receiver:
+        description: Honeydipper event receiver for Slack events via Socket Mode
+        pipelines-in:
+          - slack.*
+  slacksocket:
+    data:
+      # Slack App-Level Token (starts with xapp-)
+      # Required: Generate in Slack API dashboard under
+      # Your App > Basic Information > App-Level Tokens
+      # Scope: connections:write
+      app_token: $nil
+
+      # Slack Bot Token (starts with xoxb-)
+      # Required: Generated when installing the app to a workspace
+      bot_token: $nil
+
+      # Optional: Log level (debug, info, warning, error)
+      loglevel: info
