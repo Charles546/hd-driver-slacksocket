@@ -13,6 +13,9 @@
 #   version: pin an exact release version
 drivers:
   daemon:
+    features:
+      receiver:
+        - name: 'driver:slacksocket'
     drivers:
       slacksocket:
         name: slacksocket
@@ -27,22 +30,20 @@ drivers:
           version: '{% .options.version %}'
 {% end %}
 {% end %}
-    services:
-      receiver:
-        description: Honeydipper event receiver for Slack events via Socket Mode
-        pipelines-in:
-          - slack.*
+
   slacksocket:
-    data:
-      # Slack App-Level Token (starts with xapp-)
-      # Required: Generate in Slack API dashboard under
-      # Your App > Basic Information > App-Level Tokens
-      # Scope: connections:write
-      app_token: $nil
+    # Slack App-Level Token (starts with xapp-)
+    # Required: Generate in Slack API dashboard under
+    # Your App > Basic Information > App-Level Tokens
+    # Scope: connections:write
+    app_token: $?nil
 
-      # Slack Bot Token (starts with xoxb-)
-      # Required: Generated when installing the app to a workspace
-      bot_token: $nil
+    # Slack Bot Token (starts with xoxb-)
+    # Required: Generated when installing the app to a workspace
+    bot_token: $?nil
 
-      # Optional: Log level (debug, info, warning, error)
-      loglevel: info
+    # Optional: Log level (debug, info, warning, error)
+    loglevel: info
+
+    # Optional: the slack app user id used to filter out self-triggered events.
+    slack_user_id: $?nil
