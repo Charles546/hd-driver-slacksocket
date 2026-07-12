@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/Charles546/hd-driver-slacksocket/compare/v1.0.0...v1.0.1) (2026-07-12)
+
+
+### Bug Fixes
+
+* add rules for workflow resuming ([#7](https://github.com/Charles546/hd-driver-slacksocket/issues/7)) ([7310581](https://github.com/Charles546/hd-driver-slacksocket/commit/7310581fe69b538d73938750d7a390027041d1f8))
+
 # 1.0.0 (2026-07-11)
 
 
