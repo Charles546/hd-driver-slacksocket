@@ -47,3 +47,173 @@ drivers:
 
     # Optional: the slack app user id used to filter out self-triggered events.
     slack_user_id: $?nil
+
+systems:
+  slack_bot_socket:
+    triggers:
+      events:
+        driver: slacksocket
+        description:
+          This is a catch all trigger for all slack events through socket.
+
+      slashcommand:
+        driver: slacksocket
+        rawEvent: slash_command
+        export:
+          response_url: $event.response_url
+          text: $?event.text
+          channel_name: $event.channel_name
+          channel_fullname: '#{{ .event.channel_name }}'
+          channel_id: $event.channel_id
+          user_name: $event.user_name
+          user_id: $event.user_id
+          command: '{{ splitList " " .event.text | first }}'
+          parameters: '{{ (splitn " " 2 .event.text)._1 | default "" }}'
+        meta:
+          exports:
+            - name: response_url
+              description: Used by the :code:`reply` function to send reply messages
+            - name: text
+              description: The text of the command without the slash word prefix
+            - name: channel_name
+              description: The name of the channel without `#` prefix, this is only available for public channels
+            - name: channel_fullname
+              description: The name of the channel with `#` prefix, this is only available for public channels
+            - name: channel_id
+              description: The IDof the channel
+            - name: user_name
+              description: The name of the user who issued the command
+            - name: command
+              description: The first word in the text, used as command keyword
+            - name: parameters
+              description: The remaining string with the first word removed
+
+
+      message_event:
+        driver: slacksocket
+        rawEvent: message
+        if_match:
+          event:
+            ":absent:":
+              - subtype
+            ":except:":
+              user: $?sysData.slack_user_id
+        export:
+          slack_payload: $?event
+          slack_user_id: $?sysData.slack_user_id
+          notify:
+            - '{{ with .event.event }}{{ default .user .channel }}{{ end }}'
+
+        description: |
+          This trigger receives slack events through socket when chat messages are posted in a
+          chat or IM where the slack bot is a member. The slack bot's own
+          messages will be ignored. Messages that Mention the app is not
+          included, there is a separate trigger for that.
+
+        meta:
+          exports:
+            - name: slack_payload
+              description: The payload of the message event
+            - name: slack_user_id
+              description: The user ID of the slack app
+            - name: notify
+              description: pre-sets the channel ID of IM ID for reply messages
+
+      app_mention_event:
+        driver: slacksocket
+        rawEvent: app_mention
+        export:
+          slack_payload: $?event
+          slack_user_id: $?sysData.slack_user_id
+          notify:
+            - '{{ with .event.event }}{{ default .user .channel }}{{ end }}'
+
+        description: |
+          This trigger receives slack events through socket when the slack app is mentioned.
+
+        meta:
+          exports:
+            - name: slack_payload
+              description: The payload of the message event
+            - name: slack_user_id
+              description: The user ID of the slack app
+            - name: notify
+              description: pre-sets the channel ID of IM ID for reply messages
+
+      interact:
+        driver: slacksocket
+        rawEvent: interactive
+        export:
+          slack_payload: $?event
+
+        description: |
+          This is triggered when an user responds to an interactive component in a message through socket. This enables honeydipper
+          to interactively reacts to user choices through slack messages. A builtin rule is defined to respond to this
+          trigger, so in normal cases, it is not necessary to use this trigger directly.
+
+        meta:
+          exports:
+            - name: slack_payload
+              description: The payload of the interactive response
+
+rules:
+  - when:
+      source:
+        system: slack_bot_socket
+        trigger: slashcommand
+    do:
+      context: _slashcommands
+      call_workflow: slashcommand
+
+  - when:
+      source:
+        system: slack_bot_socket
+        trigger: interact
+    do:
+      context: 'mute'
+      description: check slack payload for resuming workflows
+      with:
+        key_to_resume: |
+          {{ range .ctx.slack_payload.actions }}
+          {{ with (splitn ":hd_resume:" 2 .action_id)._1 }}
+          {{ (splitn "::" 2 .)._0 | return }}
+          {{ break }}
+          {{ end }}
+          {{ with (splitn ":hd_resume:" 2 .block_id)._1 }}
+          {{ (splitn "::" 2 .)._0 | return }}
+          {{ break }}
+          {{ end }}
+          {{ end }}
+        resume_status: |
+          {{ range .ctx.slack_payload.actions }}
+          {{ with (splitn ":hd_status:" 2 .action_id)._1 }}
+          {{ (splitn "::" 2 .)._0 | return }}
+          {{ break }}
+          {{ end }}
+          {{ with (splitn ":hd_status:" 2 .block_id)._1 }}
+          {{ (splitn "::" 2 .)._0 | return }}
+          {{ break }}
+          {{ end }}
+          {{ end }}
+        resume_reason: >-
+          {{- range .ctx.slack_payload.actions }}
+          {{- with (splitn ":hd_reason:" 2 .action_id)._1 }}
+          {{- (splitn "::" 2 .)._0 | return }}
+          {{- break }}
+          {{- end }}
+          {{- with (splitn ":hd_reason:" 2 .block_id)._1 }}
+          {{- (splitn "::" 2 .)._0 | return }}
+          {{- break }}
+          {{- end }}
+          {{- end -}}
+      steps:
+        - if: [ "$?ctx.key_to_resume" ]
+          resume: $?ctx.key_to_resume
+          with:
+            resume_message:
+              labels:
+                status: $?ctx.resume_status
+                reason: $?ctx.resume_reason
+              payload:
+                slack_payload: $ctx.slack_payload
+          description: resume workflow from interactive slack payload
