@@ -288,7 +288,7 @@ func (d *slacksocketDriver) handleEventsAPIBackground(event socketmode.Event) {
 	}
 
 	_ = d.EmitEvent(map[string]interface{}{
-		"events": []interface{}{"slack." + innerEvent.Type},
+		"events": []interface{}{d.Name + "." + innerEvent.Type},
 		"data":   payload,
 	})
 }
@@ -314,7 +314,7 @@ func (d *slacksocketDriver) handleInteractiveEvent(event socketmode.Event) {
 	}
 
 	_ = d.EmitEvent(map[string]interface{}{
-		"events": []interface{}{"slack.interactive"},
+		"events": []interface{}{d.Name + ".interactive"},
 		"data":   payload,
 	})
 }
@@ -340,7 +340,7 @@ func (d *slacksocketDriver) handleSlashCommandEvent(event socketmode.Event) {
 	}
 
 	_ = d.EmitEvent(map[string]interface{}{
-		"events": []interface{}{"slack.slash_command"},
+		"events": []interface{}{d.Name + ".slash_command"},
 		"data":   payload,
 	})
 }
