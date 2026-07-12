@@ -1,0 +1,68 @@
+---
+# Minimal config to use slack socket mode.
+repos:
+  - repo: https://github.com/honeydipper/honeydipper-config-essentials.git
+    branch: v4-rc
+    options:
+      skip_slack_webhooks: true # disable slack webhook
+  - repo: https://github.com/Charles546/hd-driver-slacksocket.git
+    path: config
+      # optionally, you can use local copy of the driver if available.
+      use_local_binary: {% empty .env.USE_LOCAL_SLACKSOCKET_DRIVER | not %}
+
+systems:
+  slack_bot_socket:
+    bot_token: LOOKUP[secret-driver,secret-path-for-bot-token]
+    app_token: LOOKUP[secret-driver,secret-path-for-app-token]
+    slack_user_id: XXXXXX
+
+rules:
+  - when:
+      source:
+        system: slack_bot_socket
+        trigger: message_event
+      if_match:
+        event:
+          text: ':regex:open_sesame'
+    do:
+      context: mute
+      with:
+        notify:
+          - "#some_channel"
+        # must use a resume_key in the interactive message.
+        resume_key: '{{ uuidv4 }}'
+      steps:
+        - call_workflow: notify
+          with:
+            text: "Would you like to approve this request?"
+            blocks:
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: "*New Ticket #1024:* Please review the deployment request."
+              - type: "actions"
+                # resume_key can be added to the block_id or action_id with this format.
+                block_id: ':hd_resume:{{ .ctx.resume_key }}::'
+                elements:
+                  - type: "button"
+                    text:
+                      type: "plain_text"
+                      text: "Approve"
+                      emoji: true
+                    style: "primary"
+                    value: "approve_ticket"
+                    # return status can be added to the block_id or action_id with this format.
+                    action_id: ":hd_status:success::"
+                  - type: "button"
+                    text:
+                      type: "plain_text"
+                      text: "Reject"
+                      emoji: true
+                    style: "danger"
+                    value: "reject_ticket"
+                    # return error/failure reasoncan be added to the block_id or action_id with this format.
+                    action_id: ":hd_status:failure::,:hd_reason:rejected::"
+        - wait: "10m"
+        - call_workflow: notify
+          with:
+            text: 'resumed with status `{{ .labels.status }}`{{ with .labels.reason }} and reason `{{ . }}`{{ end }}.'
